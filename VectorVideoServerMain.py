@@ -7,12 +7,15 @@ class SimpleEcho(WebSocket):
 
 
     def handleMessage(self):
-        if self.data is None:
-            self.data = ''
+        try:
+            if self.data is None:
+                self.data = ''
 
-        # echo message back to client
-        self.vectorSender = VectorSender(self)
-        self.sendMessage(str(self.data))
+            # echo message back to client
+            self.vectorSender = VectorSender(self)
+            self.sendMessage(str(self.data))
+        except Exception as e:
+            print(e)
 
     def send(self, data):
         self.sendMessage(data)

@@ -4,6 +4,17 @@ import threading
 import math
 import time
 import random
+import VectorConversion
+
+def genereateMick(vectors, x, y):
+    vectors.addVector(x + 0, y + 150, False)
+    vectors.addVector(x + 0, y + 0, True)
+    vectors.addVector(x + 50, y + 100, True)
+    vectors.addVector(x + 100, y + 0, True)
+    vectors.addVector(x + 100, y + 0, True)
+    vectors.addVector(x + 100, y + 150, True)
+    vectors.addVector(x + 150, y + 150, False)
+
 
 class VectorSender(object):
     def __init__(self, webSocket):
@@ -15,16 +26,14 @@ class VectorSender(object):
 
     def run(self):
         while self.active:
-            vectors = '['
-            vectors += '{"x":%i, "y":%i, "draw":false}'%(300-150*math.sin(self.count), 300-150*math.cos(self.count))
-            vectors += ', {"x":%f, "y":%f, "draw":true}'%(300+150*math.sin(self.count), 300+150*math.cos(self.count))
-            vectors += ', {"x":%f, "y":%f, "draw":true}'%(300+150*math.sin(self.count), 300-150*math.cos(self.count))
-            vectors += ', {"x":%f, "y":%f, "draw":true}'%(300-150*math.sin(self.count), 300+150*math.cos(self.count))
-            vectors += ', {"x":%f, "y":%f, "draw":true}'%(300-150*math.sin(self.count), 300-150*math.cos(self.count))
-            for i in range(int(self.count*100)):
-                vectors += ', {"x":%f, "y":%f, "draw":false}'%(random.random()*600, random.random()*600)
-                vectors += ', {"x":%f, "y":%f, "draw":true}'%(random.random()*600, random.random()*600)
-            vectors += ']}'
-            self.webSocket.sendMessage('{"type":"FRAME", "vectorData":%s'%(str(vectors)))
+            vectors = VectorConversion.VectorFrame()
+            vectors.addVector(300-150*math.sin(self.count), 300-150*math.cos(self.count), False)
+            vectors.addVector(300+150*math.sin(self.count), 300+150*math.cos(self.count), True)
+            vectors.addVector(300+150*math.sin(self.count), 300-150*math.cos(self.count), True)
+            vectors.addVector(300-150*math.sin(self.count), 300+150*math.cos(self.count), True)
+            vectors.addVector(300-150*math.sin(self.count), 300-150*math.cos(self.count), True)
+            #genereateMick(vectors, random.random()*600, random.random()*600)
+            genereateMick(vectors, self.count*10, 100)
+            self.webSocket.sendMessage(vectors.finalize())
             self.count += 0.01
-            time.sleep(0.033)
+            time.sleep(0.013)

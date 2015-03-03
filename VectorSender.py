@@ -26,6 +26,7 @@ class VectorSender(object):
 
     def run(self):
         while self.active:
+            t = time.time()
             vectors = VectorConversion.VectorFrame()
             vectors.addVector(300-150*math.sin(self.count), 300-150*math.cos(self.count), False)
             vectors.addVector(300+150*math.sin(self.count), 300+150*math.cos(self.count), True)
@@ -36,4 +37,6 @@ class VectorSender(object):
             genereateMick(vectors, self.count*10, 100)
             self.webSocket.sendMessage(vectors.finalize())
             self.count += 0.01
+            dt = time.time()-t
+
             time.sleep(0.013)

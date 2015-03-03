@@ -1,5 +1,6 @@
 from SimpleWebSocketServer import WebSocket, SimpleWebSocketServer
-from VectorSender import VectorSender
+import VectorSender
+import VectorVideoFileSender
 
 class SimpleEcho(WebSocket):
     """def __init__(self, type1, type2, server, sock, address):
@@ -12,7 +13,7 @@ class SimpleEcho(WebSocket):
                 self.data = ''
 
             # echo message back to client
-            self.vectorSender = VectorSender(self)
+            self.vectorSender = VectorVideoFileSender.VectorVideoFileSender(self)
             self.sendMessage(str(self.data))
         except Exception as e:
             print(e)

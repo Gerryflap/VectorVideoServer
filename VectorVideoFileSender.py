@@ -21,4 +21,4 @@ class VectorVideoFileSender(object):
                 self.file_.seek(0)
             else:
                 self.webSocket.sendMessage(vectors)
-            time.sleep(0.33)
+            time.sleep(0.033)

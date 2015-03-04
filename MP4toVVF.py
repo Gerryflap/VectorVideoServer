@@ -3,7 +3,10 @@ __author__ = 'Gerryflap'
 import subprocess as sp
 import VectorConversion
 import threading
+from multiprocessing import Process, Queue
 import time
+import random
+import thread
 import sys
 
 running = True
@@ -37,8 +40,8 @@ def getMaxChaos(frame, x, y, width):
     chaos = getPixelChaos(frame, x, y, width)
     maxdx = 0
     maxdy = 0
-    for dx in range(-1, 2):
-        for dy in range(-1, 2):
+    for dx in range(-4, 5):
+        for dy in range(-4, 5):
             if(dx != 0 and dy != 0):
                 tempChaos = getPixelChaos(frame, x+dx, y+dy, width)
                 if(tempChaos != -1):
@@ -48,6 +51,51 @@ def getMaxChaos(frame, x, y, width):
                         chaos = tempChaos
 
     return maxdx, maxdy
+
+def generateVectorFrame2(frame, width, q, maxDist, minChaos, thisframenum, outputQueue):
+    #global framenum
+    framenum = thisframenum
+    print("Generating vector frame %i"%(thisframenum))
+    vectors = []
+    q = int(q)
+    qs = q ** 2
+    for x in range(width):
+        x = x
+        for y in range(len(frame)/(width)):
+            y = y
+            if(getPixelChaos(frame, x, y, width) > minChaos):
+                vectors.append([x, y, minChaos + 1])
+    print len(vectors)
+    vectorFrame = VectorConversion.VectorFrame()
+
+    finalVectors = vectors
+    vectorFrame.addVector(finalVectors[0][0], finalVectors[0][1], False)
+    finalVectors = finalVectors[1:]
+    thisVector = finalVectors[0]
+    closeEnough = False
+    while len(finalVectors) > 2:
+        closestDistance = 1000000000
+        closestVector = [-1000, -1000]
+
+        for vector in finalVectors:
+            if(vector != thisVector):
+                #Distance is used as a squared, because taking the square root only takes time and is not needed to find the closest point
+                tempDist = ((vector[0] - thisVector[0])**2.0 + (vector[1] - thisVector[1])**2.0)
+                if(tempDist < closestDistance and tempDist != 0):
+                    closestDistance = tempDist
+                    closestVector = vector
+        vectorFrame.addVector(thisVector[0], thisVector[1], closeEnough and thisVector[2] > minChaos)
+        closeEnough = closestDistance**0.5 < maxDist
+        if(closestVector[0] != -1000):
+            finalVectors.remove(thisVector)
+            thisVector = closestVector
+        else:
+            finalVectors.remove(thisVector)
+            thisVector = finalVectors[0]
+
+    print("Done generating vector frame %i"%(thisframenum))
+    outputQueue.put([thisframenum, vectorFrame.finalize()])
+
 
 def generateVectorFrame(frame, width, q, maxDist, minChaos):
     vectors = []
@@ -66,7 +114,11 @@ def generateVectorFrame(frame, width, q, maxDist, minChaos):
             y = vector[1]
             (dx, dy) = getMaxChaos(frame, x, y, width)
             if dx == 0 and dy == 0:
-                toBeFinalized.append([vector , [getPixelChaos(frame, x, y, width)]])
+                if getPixelChaos(frame, x, y, width)>minChaos:
+                    toBeFinalized.append([vector , [getPixelChaos(frame, x, y, width)]])
+                else:
+                    vector[0] = x + int(random.random()*4-2)
+                    vector[1] = y + + int(random.random()*4-2)
             else:
                 vector[0] = x + dx
                 vector[1] = y + dy
@@ -77,7 +129,7 @@ def generateVectorFrame(frame, width, q, maxDist, minChaos):
     vectorFrame.addVector(finalVectors[0][0], finalVectors[0][1], False)
     finalVectors = finalVectors[1:]
     thisVector = finalVectors[0]
-    closeEnough = False;
+    closeEnough = False
     #draw lines
     while len(finalVectors) > 2:
         closestDistance = 1000000000
@@ -92,7 +144,6 @@ def generateVectorFrame(frame, width, q, maxDist, minChaos):
                     closestVector = vector
         vectorFrame.addVector(thisVector[0], thisVector[1], closeEnough and thisVector[2] > minChaos)
         closeEnough = closestDistance**0.5 < maxDist
-        print(closeEnough, closestDistance**0.5)
         if(closestVector[0] != -1000):
             finalVectors.remove(thisVector)
             thisVector = closestVector
@@ -102,42 +153,64 @@ def generateVectorFrame(frame, width, q, maxDist, minChaos):
     return vectorFrame.finalize()
 
 def generateVectorVideoFile(outputFile, frames, width, q, maxDist, minChaos):
+    print("Started generation")
+    frameQueue = Queue()
+    outputFrames = {}
     outputFile = open(outputFile, "w")
     print(frames)
     global running
-    while running or (len(frames) != 0):
-        if(len(frames) > 0):
-            tempFrame = frames[0][:]
-            frames.remove(tempFrame)
-            outputFile.write(generateVectorFrame(tempFrame, width, q, maxDist, minChaos)+"\n")
+    currentFrame = 0
+    lastFrame = 0
+    while running or (frames.qsize() != 0):
+        if(frames.qsize() > 0):
+            tempFrame = frames.get()
+            print("Starting thread")
+            p = Process(target=generateVectorFrame2, args=(tempFrame, width, q, maxDist, minChaos, currentFrame, frameQueue))
+            p.start()
+            print("Thread started!")
+            currentFrame += 1
+        try:
+            newFrame = frameQueue.get_nowait()
+            outputFrames[str(newFrame[0])] = newFrame[1]
+        except Exception as e:
+            pass
+        if(str(lastFrame+1) in outputFrames):
+            outputFrame = outputFrames.pop(str(lastFrame+1))
+            outputFile.write(outputFrame+'\n')
             outputFile.flush()
+            lastFrame += 1
         else:
+            print(frames)
             time.sleep(0.1)
     outputFile.close()
+    running = False
 
 
+if __name__ == '__main__':
+    #FFMPEG_BIN = "ffmpeg" # on Linux ans Mac OS
+    FFMPEG_BIN = "ffmpeg.exe" # on Windows
 
-#FFMPEG_BIN = "ffmpeg" # on Linux ans Mac OS
-FFMPEG_BIN = "ffmpeg.exe" # on Windows
-
-#fileLocation = raw_input("Video file path: ")
-command = [ FFMPEG_BIN,
-            '-i',"C:\Users\Gerryflap\Pictures\\test.mov",
-            '-f', 'image2pipe',
-            '-pix_fmt', 'rgb24',
-            '-vcodec', 'rawvideo', '-']
-#command = [ FFMPEG_BIN, '-help']
-pipe = sp.Popen(command, stdout = sp.PIPE, bufsize=10**8)
-frames = []
-raw_image = " "
-outputFile = "out.vvf"
-threading._start_new_thread(generateVectorVideoFile, (outputFile, frames, 854, 140, 100, 100))
-while(len(raw_image) != 0):
-    raw_image = pipe.stdout.read(854*480*3)
-    pipe.stdout.flush()
-    image = []
-    for char in raw_image:
-        image.append(ord(char))
-    frames.append(image)
-running = False
-print(len(frames))
+    #fileLocation = raw_input("Video file path: ")
+    command = [ FFMPEG_BIN,
+                '-i',"C:\Users\Gerryflap\Pictures\\test.mov",
+                '-f', 'image2pipe',
+                '-pix_fmt', 'rgb24',
+                '-vcodec', 'rawvideo', '-']
+    #command = [ FFMPEG_BIN, '-help']
+    pipe = sp.Popen(command, stdout = sp.PIPE, bufsize=10**8)
+    frames = Queue()
+    raw_image = " "
+    framenum = 0
+    outputFile = "out.vvf"
+    p = Process(target=generateVectorVideoFile, args=(outputFile, frames, 360, 840, 10, 400))
+    p.start()
+    while(len(raw_image) != 0):
+        raw_image = pipe.stdout.read(360*640*3)
+        pipe.stdout.flush()
+        image = []
+        for char in raw_image:
+            image.append(ord(char))
+        frames.put(image)
+    print(frames.qsize())
+    while running:
+        time.sleep(1)
